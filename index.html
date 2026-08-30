@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Real Bridge Builder — physics that's actually real</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#111c31; --panel2:#0e1728; --line:#22314f;
+    --text:#e7eefc; --muted:#8ea3c7; --accent:#38bdf8; --accent2:#22d3ee;
+    --good:#35c46a; --warn:#f4d03f; --bad:#e74c3c; --orange:#ff9f43;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);overflow:hidden;}
+  #app{display:flex;flex-direction:column;height:100vh;}
+  header{display:flex;align-items:center;gap:14px;padding:8px 14px;background:linear-gradient(90deg,#0e1a30,#132546);border-bottom:1px solid var(--line);}
+  header h1{font-size:16px;margin:0;letter-spacing:.3px;}
+  header h1 .g{background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:800}
+  header .sub{font-size:12px;color:var(--muted)}
+  .toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 14px;background:var(--panel2);border-bottom:1px solid var(--line);}
+  .group{display:flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid var(--line);border-radius:10px;background:#0c1526;}
+  .group .lbl{font-size:11px;color:var(--muted);margin-right:2px;text-transform:uppercase;letter-spacing:.4px}
+  button{font:inherit;color:var(--text);background:#16233d;border:1px solid var(--line);padding:6px 10px;border-radius:8px;cursor:pointer;font-size:13px;transition:.12s;}
+  button:hover{border-color:var(--accent);}
+  button.active{background:linear-gradient(90deg,#123,#155);border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
+  button.mat{display:flex;align-items:center;gap:7px}
+  button.mat .sw{width:14px;height:14px;border-radius:3px;box-shadow:0 0 6px rgba(0,0,0,.4)}
+  button.primary{background:linear-gradient(90deg,#0891b2,#0ea5e9);border-color:#38bdf8;font-weight:700}
+  button.danger{background:#3a1620;border-color:#5b2231}
+  button.danger:hover{border-color:var(--bad)}
+  .slider{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+  input[type=range]{accent-color:var(--accent)}
+  #wrap{position:relative;flex:1;min-height:0}
+  canvas{display:block;width:100%;height:100%;cursor:crosshair;background:transparent}
+  #hud{position:absolute;top:12px;left:12px;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+  .card{background:rgba(12,20,36,.82);border:1px solid var(--line);border-radius:10px;padding:8px 11px;backdrop-filter:blur(6px);font-size:12px;min-width:170px}
+  .card h3{margin:0 0 5px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .row{display:flex;justify-content:space-between;gap:14px;line-height:1.55}
+  .row b{font-variant-numeric:tabular-nums}
+  #banner{position:absolute;top:12px;left:50%;transform:translateX(-50%);padding:9px 18px;border-radius:12px;font-weight:700;font-size:15px;display:none;pointer-events:none;box-shadow:0 6px 20px rgba(0,0,0,.4)}
+  #banner.win{display:block;background:linear-gradient(90deg,#0f7a3f,#12b866);color:#eafff2}
+  #banner.lose{display:block;background:linear-gradient(90deg,#7a1220,#c1273c);color:#ffeef0}
+  #tip{position:absolute;pointer-events:none;background:rgba(6,12,24,.94);border:1px solid var(--accent);border-radius:8px;padding:6px 9px;font-size:12px;display:none;white-space:nowrap;z-index:5}
+  #tip .k{color:var(--muted)}
+  #help{position:absolute;bottom:12px;left:12px;max-width:340px;font-size:11.5px;color:var(--muted);line-height:1.5;background:rgba(12,20,36,.7);border:1px solid var(--line);border-radius:10px;padding:9px 11px}
+  #help b{color:var(--text)}
+  #legend{position:absolute;bottom:12px;right:12px;display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);background:rgba(12,20,36,.7);border:1px solid var(--line);border-radius:10px;padding:8px 11px}
+  #legend .bar{width:120px;height:9px;border-radius:5px;background:linear-gradient(90deg,#35c46a,#f4d03f,#e74c3c)}
+  kbd{background:#16233d;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;font-size:10.5px}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1><span class="g">Real</span> Bridge Builder</h1>
+    <span class="sub">real steel &amp; wood · Hooke's law · Euler buckling · a real truck crosses</span>
+  </header>
+
+  <div class="toolbar">
+    <div class="group">
+      <span class="lbl">Material</span>
+      <button class="mat active" data-mat="road"><span class="sw" style="background:#3a3f4b"></span>Road</button>
+      <button class="mat" data-mat="wood"><span class="sw" style="background:#a9743b"></span>Wood</button>
+      <button class="mat" data-mat="steel"><span class="sw" style="background:#8fa3bf"></span>Steel</button>
+      <button class="mat" data-mat="cable"><span class="sw" style="background:#d9d9d9"></span>Cable</button>
+      <button id="btnDelete" class="danger">🗑 Delete</button>
+    </div>
+
+    <div class="group">
+      <span class="lbl">Mode</span>
+      <button id="btnBuild" class="active">🔧 Build</button>
+      <button id="btnSim">▶ Simulate</button>
+      <button id="btnDrive" class="primary">🚚 Drive Truck</button>
+    </div>
+
+    <div class="group slider">
+      <span class="lbl">Truck</span>
+      <input id="truckW" type="range" min="1" max="20" step="1" value="8">
+      <span id="truckWv" style="color:var(--text);min-width:52px">8.0 t</span>
+    </div>
+
+    <div class="group">
+      <button id="btnReset">↺ Reset</button>
+      <button id="btnClear" class="danger">✕ Clear</button>
+    </div>
+  </div>
+
+  <div id="wrap">
+    <canvas id="c"></canvas>
+    <div id="hud">
+      <div class="card">
+        <h3>Bridge</h3>
+        <div class="row"><span>Cost</span><b id="hCost">$0</b></div>
+        <div class="row"><span>Budget</span><b id="hBudget">$2,500</b></div>
+        <div class="row"><span>Members</span><b id="hMembers">0</b></div>
+      </div>
+      <div class="card" id="cardSim" style="display:none">
+        <h3>Simulation</h3>
+        <div class="row"><span>Truck load</span><b id="hLoad">0 kN</b></div>
+        <div class="row"><span>Max stress</span><b id="hStress">0%</b></div>
+        <div class="row"><span>Worst part</span><b id="hWorst">—</b></div>
+      </div>
+    </div>
+    <div id="banner"></div>
+    <div id="tip"></div>
+    <div id="help">
+      <b>How to build:</b> drag from one dot to another to make a beam.
+      Connect the two <span style="color:#ff9f43">orange anchors</span> with a <b>Road</b> path so the
+      truck can drive across — then triangulate with <b>Steel</b>, <b>Wood</b> &amp; <b>Cable</b> so it holds.
+      A flat pin-joint deck is a mechanism: it needs triangles or it sags like a rope.
+      <br><span style="color:#6f83a8">Keys: <kbd>1</kbd>-<kbd>4</kbd> material · <kbd>D</kbd> delete · <kbd>B</kbd> build · <kbd>S</kbd> sim · <kbd>Space</kbd> drive · <kbd>R</kbd> reset · right-click a beam to delete</span>
+    </div>
+    <div id="legend"><span>safe</span><div class="bar"></div><span>breaking</span></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   REAL BRIDGE BUILDER
+   Everything here uses real physics & real material numbers:
+   - Members are compliant distance constraints solved with XPBD
+     (stable, physically-correct stiffness k = E*A/L).
+   - Axial force from Hooke's law:  N = E * A * (L - L0)/L0
+   - Tension failure at yield:      N_max = sigma_yield * A
+   - Compression failure by Euler buckling: Pcr = pi^2 * E * I / L^2
+     with I = A^2/12 for a square section (longer struts buckle first).
+   - Units: metres, kilograms, seconds, Newtons, Pascals. g = 9.81.
+   ============================================================ */
+
+const g = 9.81; // m/s^2
+
+// Real-ish material properties. E [Pa], A [m^2], density [kg/m^3], yield [Pa].
+const MATERIALS = {
+  road:  {name:"Road",  E:11e9,  A:0.020,  density:600,  yieldT:40e6,  yieldC:30e6,  color:"#565d6e", edge:"#3a3f4b", width:8, cost:12, tensionOnly:false, isRoad:true},
+  wood:  {name:"Wood",  E:11e9,  A:0.010,  density:500,  yieldT:40e6,  yieldC:25e6,  color:"#a9743b", edge:"#6f4a22", width:6, cost:8,  tensionOnly:false},
+  steel: {name:"Steel", E:200e9, A:0.0025, density:7850, yieldT:250e6, yieldC:250e6, color:"#9fb3d0", edge:"#5f7aa2", width:5, cost:25, tensionOnly:false},
+  cable: {name:"Cable", E:170e9, A:0.0006, density:7850, yieldT:1000e6,yieldC:0,     color:"#d9d9d9", edge:"#9aa2ad", width:2.5,cost:15, tensionOnly:true},
+};
+
+const BUDGET = 2500;
+
+// ---- World geometry (metres) ----
+// Ground on the left (x<=6) and right (x>=14) at y=0. An 8 m canyon between.
+const GAP_L = 6, GAP_R = 14, GROUND_Y = 0, CANYON_FLOOR = -8;
+const BUILD = {xmin:0, xmax:20, ymin:-8, ymax:10}; // where nodes may be placed
+const VIEW  = {xmin:-1.5, xmax:21.5, ymin:-8.6, ymax:11.2};
+
+// ---- State ----
+let nodes = [];     // {x,y, bx,by, vx,vy, fixed, invMass, loadFy, id}
+let members = [];   // {a,b, matKey, mat, L0, broken, N, ratio}
+let selMat = "road";
+let deleteMode = false;
+let mode = "build"; // "build" | "sim"
+let nextId = 1;
+
+const truck = {x:0, y:0, tonnes:8, driving:false, alive:true, done:false, speed:3.2, vy:0};
+
+// ---- Canvas / transform ----
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+let W=0, H=0, scale=1, ox=0, oy=0, dpr=1;
+
+function resize(){
+  dpr = Math.min(window.devicePixelRatio||1, 2);
+  const r = canvas.getBoundingClientRect();
+  W = r.width; H = r.height;
+  canvas.width = Math.round(W*dpr); canvas.height = Math.round(H*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const sx = W/(VIEW.xmax-VIEW.xmin), sy = H/(VIEW.ymax-VIEW.ymin);
+  scale = Math.min(sx,sy);
+  ox = (W-(VIEW.xmax-VIEW.xmin)*scale)/2;
+  oy = (H-(VIEW.ymax-VIEW.ymin)*scale)/2;
+}
+function w2s(x,y){ return [ox+(x-VIEW.xmin)*scale, oy+(VIEW.ymax-y)*scale]; }
+function s2w(sx,sy){ return [(sx-ox)/scale+VIEW.xmin, VIEW.ymax-(sy-oy)/scale]; }
+window.addEventListener("resize", resize);
+
+// ---- Helpers ----
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y);}
+function nodeAt(gx,gy){ return nodes.find(n=>Math.abs(n.bx-gx)<0.01 && Math.abs(n.by-gy)<0.01); }
+function nodeNearWorld(wx,wy,r){
+  let best=null,bd=r;
+  for(const n of nodes){const d=Math.hypot(n.x-wx,n.y-wy); if(d<bd){bd=d;best=n;}}
+  return best;
+}
+function pointSeg(px,py,ax,ay,bx,by){
+  const dx=bx-ax,dy=by-ay; const l2=dx*dx+dy*dy;
+  let t = l2? ((px-ax)*dx+(py-ay)*dy)/l2 : 0; t=clamp(t,0,1);
+  return Math.hypot(px-(ax+t*dx), py-(ay+t*dy));
+}
+function memberNearWorld(wx,wy,r){
+  let best=null,bd=r;
+  for(const m of members){ if(m.broken) continue;
+    const d=pointSeg(wx,wy,m.a.x,m.a.y,m.b.x,m.b.y);
+    if(d<bd){bd=d;best=m;}
+  }
+  return best;
+}
+function lerp(a,b,t){return a+(b-a)*t;}
+function stressColor(r){ // 0 green -> .6 yellow -> 1 red -> >1 dark
+  r=clamp(r,0,1.35);
+  let c1,c2,t;
+  if(r<0.6){c1=[53,196,106];c2=[244,208,63];t=r/0.6;}
+  else if(r<1){c1=[244,208,63];c2=[231,76,60];t=(r-0.6)/0.4;}
+  else {c1=[231,76,60];c2=[120,20,20];t=(r-1)/0.35;}
+  return `rgb(${Math.round(lerp(c1[0],c2[0],t))},${Math.round(lerp(c1[1],c2[1],t))},${Math.round(lerp(c1[2],c2[2],t))})`;
+}
+
+// ---- Scene setup ----
+function addNode(bx,by,fixed=false){
+  const n={x:bx,y:by,bx,by,vx:0,vy:0,fixed,invMass:0,loadFy:0,id:nextId++};
+  nodes.push(n); return n;
+}
+function addMember(a,b,matKey){
+  if(a===b) return null;
+  if(members.some(m=>(m.a===a&&m.b===b)||(m.a===b&&m.b===a))) return null;
+  const mat=MATERIALS[matKey];
+  const L0=Math.hypot(a.bx-b.bx, a.by-b.by);
+  if(L0<0.5) return null;
+  const m={a,b,matKey,mat,L0,broken:false,N:0,ratio:0};
+  members.push(m); recomputeMasses(); return m;
+}
+function removeMember(m){ const i=members.indexOf(m); if(i>=0)members.splice(i,1); recomputeMasses(); }
+function removeNode(n){
+  if(n.fixed) return;
+  members = members.filter(m=>m.a!==n&&m.b!==n);
+  const i=nodes.indexOf(n); if(i>=0)nodes.splice(i,1);
+  recomputeMasses();
+}
+function recomputeMasses(){
+  for(const n of nodes) n._m=0;
+  for(const m of members){
+    const lm = m.mat.density*m.mat.A*m.L0; // kg
+    m.a._m += lm*0.5; m.b._m += lm*0.5;
+  }
+  for(const n of nodes){
+    const mass = Math.max(n._m, 6); // small floor for stability
+    n.invMass = n.fixed?0:1/mass;
+    n.mass = mass;
+  }
+}
+function initScene(){
+  nodes=[]; members=[]; nextId=1;
+  addNode(GAP_L, GROUND_Y, true);   // left anchor
+  addNode(GAP_R, GROUND_Y, true);   // right anchor
+  recomputeMasses();
+}
+
+// ---- Physics (XPBD) ----
+const SUBSTEPS=20;
+function memberForce(m){ // returns axial force N (tension +), also sets m.N/ratio/stress
+  const dx=m.b.x-m.a.x, dy=m.b.y-m.a.y;
+  const l=Math.hypot(dx,dy)||1e-6;
+  let strain=(l-m.L0)/m.L0;
+  if(m.mat.tensionOnly && strain<0) strain=0;
+  const stress=m.mat.E*strain;           // Pa
+  const N=stress*m.mat.A;                 // N (tension +)
+  const tCap=m.mat.yieldT*m.mat.A;
+  const I=m.mat.A*m.mat.A/12;             // square section
+  const Pcr=Math.PI*Math.PI*m.mat.E*I/(m.L0*m.L0);
+  const cCap=Math.min(m.mat.yieldC*m.mat.A, Pcr);
+  m.N=N; m.stress=stress; m.strain=strain;
+  m.ratio = N>=0 ? (tCap>0?N/tCap:0) : (cCap>0?(-N)/cCap:99);
+  m.tCap=tCap; m.cCap=cCap;
+  return N;
+}
+function physicsStep(dt){
+  const sdt=dt/SUBSTEPS, sdt2=sdt*sdt;
+  for(let s=0;s<SUBSTEPS;s++){
+    // predict
+    for(const n of nodes){
+      if(n.fixed) continue;
+      const ay = -g + n.loadFy*n.invMass; // loadFy is a force (N), up positive
+      n.vy += ay*sdt;
+      // clamp runaway velocity
+      const vmag=Math.hypot(n.vx,n.vy); if(vmag>60){n.vx*=60/vmag;n.vy*=60/vmag;}
+      n.px=n.x; n.py=n.y;
+      n.x += n.vx*sdt; n.y += n.vy*sdt;
+    }
+    // solve members (XPBD, 1 iteration/substep)
+    for(const m of members){
+      if(m.broken) continue;
+      const dx=m.b.x-m.a.x, dy=m.b.y-m.a.y;
+      const l=Math.hypot(dx,dy); if(l<1e-6) continue;
+      const nx=dx/l, ny=dy/l;
+      const C=l-m.L0;
+      if(m.mat.tensionOnly && C<0) continue; // cable can't push
+      const w1=m.a.invMass, w2=m.b.invMass; if(w1+w2===0) continue;
+      const k=m.mat.E*m.mat.A/m.L0;      // N/m (real stiffness)
+      const at=(1/k)/sdt2;               // XPBD compliance / dt^2
+      const dl=(-C)/(w1+w2+at);          // 1-shot lambda (lambda reset each substep)
+      m.a.x -= w1*dl*nx; m.a.y -= w1*dl*ny;
+      m.b.x += w2*dl*nx; m.b.y += w2*dl*ny;
+    }
+    // ground collisions
+    for(const n of nodes){
+      if(n.fixed) continue;
+      if(n.y<CANYON_FLOOR){n.y=CANYON_FLOOR;if(n.vy<0)n.vy=0;}
+      if((n.x<GAP_L || n.x>GAP_R) && n.y<GROUND_Y){n.y=GROUND_Y;if(n.vy<0)n.vy=0;}
+    }
+    // update velocities + damping
+    for(const n of nodes){
+      if(n.fixed) continue;
+      n.vx=(n.x-n.px)/sdt*0.999;
+      n.vy=(n.y-n.py)/sdt*0.999;
+    }
+  }
+  // forces + breakage (once per frame)
+  let broke=false;
+  for(const m of members){
+    if(m.broken) continue;
+    memberForce(m);
+    if(m.N>0 && m.N>m.tCap){m.broken=true;broke=true;}
+    else if(m.N<0 && !m.mat.tensionOnly && (-m.N)>m.cCap){m.broken=true;broke=true;}
+    else if(Math.abs(m.strain)>0.6){m.broken=true;broke=true;} // instability guard
+  }
+  if(broke) recomputeMasses();
+}
+
+// ---- Truck ----
+function resetTruck(){truck.x=0;truck.y=0;truck.vy=0;truck.driving=false;truck.alive=true;truck.done=false;}
+function truckWeightN(){return truck.tonnes*1000*g;}
+function updateTruck(dt){
+  for(const n of nodes) n.loadFy=0;
+  if(!truck.driving) return;
+  if(!truck.alive || truck.done) return;
+
+  truck.x += truck.speed*dt;
+  if(truck.x>=GAP_R){ truck.x=GAP_R; truck.y=GROUND_Y; truck.done=true; truck.driving=false; win(); return; }
+
+  if(truck.x<=GAP_L){ truck.y=GROUND_Y; return; } // on left ground
+
+  // find topmost road member spanning truck.x
+  let best=null,bestY=-1e9,bestT=0;
+  for(const m of members){
+    if(m.broken||!m.mat.isRoad) continue;
+    const lo=Math.min(m.a.x,m.b.x), hi=Math.max(m.a.x,m.b.x);
+    if(truck.x>=lo-0.05 && truck.x<=hi+0.05){
+      const denom=(m.b.x-m.a.x);
+      const t = Math.abs(denom)<1e-6?0:(truck.x-m.a.x)/denom;
+      const y=m.a.y+t*(m.b.y-m.a.y);
+      if(y>bestY){bestY=y;best=m;bestT=t;}
+    }
+  }
+  if(best){
+    truck.vy=0; truck.y=bestY+0.15;
+    const W=truckWeightN();
+    best.a.loadFy += -W*(1-bestT);
+    best.b.loadFy += -W*bestT;
+  }else{
+    // no road under wheels -> fall
+    truck.vy -= g*dt; truck.y += truck.vy*dt;
+    if(truck.y<CANYON_FLOOR-0.5){ truck.alive=false; truck.driving=false; lose("The truck fell into the canyon!"); }
+  }
+}
+function win(){ showBanner("✅ Success! The truck made it across.","win"); }
+function lose(msg){ showBanner("💥 "+msg,"lose"); }
+
+// ---- Rendering ----
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // sky
+  const sky=ctx.createLinearGradient(0,0,0,H);
+  sky.addColorStop(0,"#0b1220"); sky.addColorStop(1,"#132038");
+  ctx.fillStyle=sky; ctx.fillRect(0,0,W,H);
+
+  // canyon walls + ground
+  drawGround();
+  if(mode==="build") drawGrid();
+  drawMembers();
+  drawNodes();
+  if(mode==="sim") drawTruck();
+  drawPreview();
+}
+function rectW(x0,y0,x1,y1){ const[a,b]=w2s(x0,y0),[c,d]=w2s(x1,y1); ctx.fillRect(Math.min(a,c),Math.min(b,d),Math.abs(c-a),Math.abs(d-b)); }
+function drawGround(){
+  // water at bottom of canyon
+  const wg=ctx.createLinearGradient(0,0,0,H);
+  wg.addColorStop(0,"#0e2a4d"); wg.addColorStop(1,"#0a1c33");
+  ctx.fillStyle=wg; rectW(GAP_L,CANYON_FLOOR,GAP_R,CANYON_FLOOR+1.4);
+  // left + right cliffs
+  const gr=ctx.createLinearGradient(0,0,0,H);
+  gr.addColorStop(0,"#26405f"); gr.addColorStop(1,"#16283d");
+  ctx.fillStyle=gr;
+  rectW(VIEW.xmin,GROUND_Y,GAP_L,VIEW.ymin);
+  rectW(GAP_R,GROUND_Y,VIEW.xmax,VIEW.ymin);
+  // grass caps
+  ctx.fillStyle="#2f9e58"; rectW(VIEW.xmin,GROUND_Y+0.18,GAP_L,GROUND_Y);
+  rectW(GAP_R,GROUND_Y+0.18,VIEW.xmax,GROUND_Y);
+  // road stubs on the ground so the truck has somewhere to start/end
+  ctx.fillStyle="#3a3f4b"; rectW(VIEW.xmin,GROUND_Y+0.35,GAP_L,GROUND_Y+0.18);
+  rectW(GAP_R,GROUND_Y+0.35,VIEW.xmax,GROUND_Y+0.18);
+}
+function drawGrid(){
+  ctx.fillStyle="rgba(120,150,200,.16)";
+  for(let x=BUILD.xmin;x<=BUILD.xmax;x++){
+    for(let y=BUILD.ymin;y<=BUILD.ymax;y++){
+      if((x<GAP_L||x>GAP_R) && y<GROUND_Y) continue; // inside solid ground
+      const[sx,sy]=w2s(x,y); ctx.beginPath(); ctx.arc(sx,sy,1.6,0,7); ctx.fill();
+    }
+  }
+}
+function drawMembers(){
+  for(const m of members){
+    if(m.broken) continue;
+    const[ax,ay]=w2s(m.a.x,m.a.y),[bx,by]=w2s(m.b.x,m.b.y);
+    let col=m.mat.color, w=m.mat.width;
+    if(mode==="sim"){
+      col=stressColor(m.ratio);
+      if(m.mat.tensionOnly && m.N<=0){ col="#4a5568"; } // slack cable
+    }
+    // outline
+    ctx.lineCap="round";
+    ctx.strokeStyle=mode==="sim"?"rgba(0,0,0,.35)":m.mat.edge; ctx.lineWidth=w+2;
+    ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke();
+    ctx.strokeStyle=col; ctx.lineWidth=w;
+    ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke();
+    if(m.mat.isRoad){ // dashed lane line
+      ctx.strokeStyle="rgba(255,255,255,.55)"; ctx.lineWidth=1.3; ctx.setLineDash([6,7]);
+      ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
+}
+function drawNodes(){
+  for(const n of nodes){
+    const[sx,sy]=w2s(n.x,n.y);
+    if(n.fixed){
+      ctx.fillStyle="#ff9f43"; ctx.strokeStyle="#7a4410"; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.rect(sx-7,sy-7,14,14); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle="rgba(0,0,0,.35)"; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(sx-7,sy+7); ctx.lineTo(sx-2,sy+12);
+      ctx.moveTo(sx,sy+7); ctx.lineTo(sx+5,sy+12);
+      ctx.moveTo(sx+7,sy+7); ctx.lineTo(sx+12,sy+12); ctx.stroke();
+    }else{
+      ctx.fillStyle="#dbe6fb"; ctx.strokeStyle="#0b1220"; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.arc(sx,sy,4.2,0,7); ctx.fill(); ctx.stroke();
+    }
+  }
+}
+function drawTruck(){
+  const[sx,sy]=w2s(truck.x,truck.y);
+  const s=scale, bw=2.2*s, bh=1.15*s;
+  ctx.save(); ctx.translate(sx, sy);
+  // underglow (RGB flair)
+  const gl=ctx.createRadialGradient(0,-bh*0.3,2,0,-bh*0.3,bw);
+  gl.addColorStop(0,"rgba(56,189,248,.35)"); gl.addColorStop(1,"rgba(56,189,248,0)");
+  ctx.fillStyle=gl; ctx.fillRect(-bw,-bh*1.6,bw*2,bh*1.8);
+  // wheels
+  ctx.fillStyle="#111"; const wr=0.28*s;
+  for(const wx of [-bw*0.33, bw*0.33]){ ctx.beginPath(); ctx.arc(wx,-wr*0.2,wr,0,7); ctx.fill();
+    ctx.fillStyle="#333"; ctx.beginPath(); ctx.arc(wx,-wr*0.2,wr*0.45,0,7); ctx.fill(); ctx.fillStyle="#111"; }
+  // body (white, Alex-style)
+  ctx.fillStyle="#eef3fb"; ctx.strokeStyle="#0b1220"; ctx.lineWidth=1.5;
+  roundRect(-bw*0.5,-bh-wr*0.2,bw,bh,4); ctx.fill(); ctx.stroke();
+  // cab
+  ctx.fillStyle="#1b2a4a"; roundRect(bw*0.12,-bh-wr*0.2, bw*0.36, bh*0.62,3); ctx.fill();
+  ctx.restore();
+}
+function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+
+// ---- Build interaction (drag to connect) ----
+let dragStart=null; // {node|null, gx, gy}
+let mouseW=null, hoverMember=null;
+
+function eventWorld(e){
+  const r=canvas.getBoundingClientRect();
+  return s2w(e.clientX-r.left, e.clientY-r.top);
+}
+function snap(wx,wy){
+  let gx=Math.round(wx), gy=Math.round(wy);
+  gx=clamp(gx,BUILD.xmin,BUILD.xmax); gy=clamp(gy,BUILD.ymin,BUILD.ymax);
+  if((gx<GAP_L||gx>GAP_R) && gy<GROUND_Y) gy=GROUND_Y; // can't build inside ground
+  return [gx,gy];
+}
+canvas.addEventListener("mousedown",(e)=>{
+  if(e.button===2) return; // right-click handled separately
+  const [wx,wy]=eventWorld(e);
+  if(mode!=="build") return;
+  if(deleteMode){
+    const m=memberNearWorld(wx,wy,0.35); if(m){removeMember(m);updateHUD();return;}
+    const n=nodeNearWorld(wx,wy,0.4); if(n&&!n.fixed){removeNode(n);updateHUD();}
+    return;
+  }
+  const [gx,gy]=snap(wx,wy);
+  const existing=nodeAt(gx,gy);
+  dragStart={node:existing, gx, gy};
+});
+canvas.addEventListener("mousemove",(e)=>{
+  mouseW=eventWorld(e);
+  if(mode==="sim"){ hoverMember=memberNearWorld(mouseW[0],mouseW[1],0.4); showTip(e); }
+  else hideTip();
+});
+window.addEventListener("mouseup",(e)=>{
+  if(!dragStart||mode!=="build"){dragStart=null;return;}
+  const [wx,wy]=eventWorld(e);
+  const [gx,gy]=snap(wx,wy);
+  if(gx===dragStart.gx && gy===dragStart.gy){ dragStart=null; return; } // simple click, no beam
+  const a = dragStart.node || nodeAt(dragStart.gx,dragStart.gy) || addNode(dragStart.gx,dragStart.gy);
+  const b = nodeAt(gx,gy) || addNode(gx,gy);
+  addMember(a,b,selMat);
+  // clean up any orphan nodes we may have made if member failed
+  pruneOrphans();
+  dragStart=null; updateHUD();
+});
+canvas.addEventListener("contextmenu",(e)=>{
+  e.preventDefault();
+  if(mode!=="build") return;
+  const [wx,wy]=eventWorld(e);
+  const m=memberNearWorld(wx,wy,0.4); if(m) removeMember(m);
+  updateHUD();
+});
+function pruneOrphans(){
+  const used=new Set(); members.forEach(m=>{used.add(m.a);used.add(m.b);});
+  nodes=nodes.filter(n=>n.fixed||used.has(n));
+}
+function drawPreview(){
+  if(mode!=="build"||!dragStart||!mouseW) return;
+  const [gx,gy]=snap(mouseW[0],mouseW[1]);
+  const[ax,ay]=w2s(dragStart.gx,dragStart.gy),[bx,by]=w2s(gx,gy);
+  ctx.strokeStyle=MATERIALS[selMat].color; ctx.globalAlpha=.7; ctx.lineWidth=MATERIALS[selMat].width;
+  ctx.setLineDash([4,5]); ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke();
+  ctx.setLineDash([]); ctx.globalAlpha=1;
+  const L=Math.hypot(gx-dragStart.gx,gy-dragStart.gy);
+  ctx.fillStyle="#dbe6fb"; ctx.font="12px -apple-system,sans-serif";
+  ctx.fillText(L.toFixed(1)+" m · $"+Math.round(L*MATERIALS[selMat].cost),(ax+bx)/2+8,(ay+by)/2-6);
+}
+
+// ---- Tooltip in sim ----
+const tip=document.getElementById("tip");
+function showTip(e){
+  if(!hoverMember){hideTip();return;}
+  const m=hoverMember;
+  const SF = m.ratio>0.001? (1/m.ratio):99;
+  const kind = m.N>=0?"tension":"compression";
+  tip.innerHTML=
+    `<b>${m.mat.name}</b> · ${m.L0.toFixed(1)} m<br>`+
+    `<span class="k">force:</span> ${(Math.abs(m.N)/1000).toFixed(0)} kN ${kind}<br>`+
+    `<span class="k">stress:</span> ${(m.stress/1e6).toFixed(0)} MPa · <span class="k">load:</span> ${(m.ratio*100).toFixed(0)}%<br>`+
+    `<span class="k">safety factor:</span> ${SF>=99?"∞":SF.toFixed(2)}`;
+  tip.style.display="block";
+  const r=canvas.getBoundingClientRect();
+  tip.style.left=(e.clientX-r.left+14)+"px";
+  tip.style.top=(e.clientY-r.top+14)+"px";
+}
+function hideTip(){tip.style.display="none";}
+
+// ---- HUD ----
+function updateHUD(){
+  let cost=0; for(const m of members) cost+=m.L0*m.mat.cost;
+  document.getElementById("hCost").textContent="$"+Math.round(cost).toLocaleString();
+  const bEl=document.getElementById("hBudget"); bEl.textContent="$"+BUDGET.toLocaleString();
+  bEl.style.color = cost>BUDGET? "var(--bad)":"var(--good)";
+  document.getElementById("hMembers").textContent=members.filter(m=>!m.broken).length;
+  document.getElementById("cardSim").style.display = mode==="sim"?"block":"none";
+  if(mode==="sim"){
+    document.getElementById("hLoad").textContent = truck.driving? (truckWeightN()/1000).toFixed(0)+" kN":"—";
+    let worst=null,wr=0;
+    for(const m of members){ if(m.broken)continue; if(m.ratio>wr){wr=m.ratio;worst=m;} }
+    document.getElementById("hStress").textContent=(wr*100).toFixed(0)+"%";
+    const hs=document.getElementById("hStress");
+    hs.style.color = wr>1?"var(--bad)":wr>0.7?"var(--warn)":"var(--good)";
+    document.getElementById("hWorst").textContent = worst? `${worst.mat.name} (${(Math.abs(worst.N)/1000).toFixed(0)} kN)`:"—";
+  }
+}
+const banner=document.getElementById("banner");
+let bannerT=0;
+function showBanner(text,cls){ banner.textContent=text; banner.className=cls; bannerT=cls==="win"?9999:5; }
+function hideBanner(){ banner.className=""; }
+
+// ---- Mode switching ----
+function setMode(m){
+  mode=m;
+  if(m==="build"){
+    // restore build positions, un-break, reset truck
+    for(const n of nodes){n.x=n.bx;n.y=n.by;n.vx=n.vy=0;n.loadFy=0;}
+    for(const mem of members){mem.broken=false;}
+    resetTruck(); hideBanner(); recomputeMasses();
+    canvas.style.cursor="crosshair";
+  }else{
+    resetTruck(); hideBanner();
+    canvas.style.cursor="default";
+  }
+  document.getElementById("btnBuild").classList.toggle("active",m==="build");
+  document.getElementById("btnSim").classList.toggle("active",m==="sim");
+  updateHUD();
+}
+function resetSim(){
+  for(const n of nodes){n.x=n.bx;n.y=n.by;n.vx=n.vy=0;n.loadFy=0;}
+  for(const mem of members){mem.broken=false;}
+  resetTruck(); hideBanner(); recomputeMasses(); updateHUD();
+}
+
+// ---- UI wiring ----
+document.querySelectorAll("button.mat").forEach(b=>{
+  b.addEventListener("click",()=>{
+    selMat=b.dataset.mat; deleteMode=false;
+    document.querySelectorAll("button.mat").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
+    document.getElementById("btnDelete").classList.remove("active");
+  });
+});
+document.getElementById("btnDelete").addEventListener("click",function(){
+  deleteMode=!deleteMode; this.classList.toggle("active",deleteMode);
+  if(deleteMode) document.querySelectorAll("button.mat").forEach(x=>x.classList.remove("active"));
+});
+document.getElementById("btnBuild").addEventListener("click",()=>setMode("build"));
+document.getElementById("btnSim").addEventListener("click",()=>setMode("sim"));
+document.getElementById("btnDrive").addEventListener("click",()=>{
+  if(mode!=="sim") setMode("sim");
+  resetSim(); truck.driving=true; truck.alive=true; truck.done=false;
+});
+document.getElementById("btnReset").addEventListener("click",()=>{ if(mode==="sim")resetSim(); else setMode("build"); });
+document.getElementById("btnClear").addEventListener("click",()=>{
+  members=[]; nodes=nodes.filter(n=>n.fixed); recomputeMasses(); setMode("build"); updateHUD();
+});
+const tw=document.getElementById("truckW");
+tw.addEventListener("input",()=>{ truck.tonnes=+tw.value; document.getElementById("truckWv").textContent=(+tw.value).toFixed(1)+" t"; updateHUD(); });
+
+window.addEventListener("keydown",(e)=>{
+  if(e.target.tagName==="INPUT") return;
+  const k=e.key.toLowerCase();
+  if(k==="1"){selectMat("road");} else if(k==="2"){selectMat("wood");}
+  else if(k==="3"){selectMat("steel");} else if(k==="4"){selectMat("cable");}
+  else if(k==="d"){document.getElementById("btnDelete").click();}
+  else if(k==="b"){setMode("build");}
+  else if(k==="s"){setMode("sim");}
+  else if(k==="r"){document.getElementById("btnReset").click();}
+  else if(k==="c"){document.getElementById("btnClear").click();}
+  else if(k===" "){e.preventDefault();document.getElementById("btnDrive").click();}
+});
+function selectMat(m){ const b=document.querySelector(`button.mat[data-mat="${m}"]`); if(b)b.click(); }
+
+// ---- Main loop ----
+let last=performance.now();
+function loop(now){
+  let dt=(now-last)/1000; last=now; dt=Math.min(dt,1/30);
+  if(mode==="sim"){
+    updateTruck(dt);
+    physicsStep(dt);
+    if(bannerT<9999 && banner.className){ bannerT-=dt; if(bannerT<=0) hideBanner(); }
+    updateHUD();
+  }
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// ---- Boot ----
+initScene();
+resize();
+updateHUD();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
